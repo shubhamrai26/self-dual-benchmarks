@@ -50,7 +50,8 @@ void experiment1( bool verify = true )
     auto const result = lorina::read_aiger( experiments::benchmark_path( benchmark ), mockturtle::aiger_reader( aig ) );
     if ( result != lorina::return_code::success )
     {
-      fmt::print( "[e] reading benchmark {} failed\n[e] continuing with the next benchmark file\n", benchmark );
+      fmt::print( "[e] reading benchmark {} failed\n"
+                  "[e] continuing with the next benchmark file\n", benchmark );
       continue;
     }
 
@@ -94,7 +95,8 @@ void experiment2( uint32_t num_rewrite_times = 1u, bool verify = true )
     auto const result = lorina::read_aiger( experiments::benchmark_path( benchmark ), mockturtle::aiger_reader( aig ) );
     if ( result != lorina::return_code::success )
     {
-      fmt::print( "[e] reading benchmark {} failed\n[e] continuing with the next benchmark file\n", benchmark );
+      fmt::print( "[e] reading benchmark {} failed\n"
+                  "[e] continuing with the next benchmark file\n", benchmark );
       continue;
     }
 
@@ -124,7 +126,7 @@ void experiment2( uint32_t num_rewrite_times = 1u, bool verify = true )
       if ( xmg.size() == size_before )
         break;
 
-      xmg_before = xmg.size();
+      size_before = xmg.size();
     }
 
     /* profile XMG gates */
