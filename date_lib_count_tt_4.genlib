@@ -1,0 +1,39 @@
+GATE inv1 1 O=!a; PIN * INV 1 999 1 1 1 1
+GATE zero	0	O=CONST0;
+GATE buf 2 O=a; PIN * NONINV 1 999 1.0 1.0 1.0 1.0
+GATE one	0	O=CONST1;
+GATE nand2 1.5 O=!(a*b); 	PIN * INV 1 999 1 1 1 1 # put a comment 
+GATE nor2 1.5 O=!(a+b); PIN * INV 1 999 1 1 1 1
+GATE mux2             3    O=(!s*a)+(b*s); PIN * NONINV 1 999 1 1 1 1 
+#GATE and2	2.5	O=a*b;		PIN * NONINV 1 999 1 1 1 1
+#GATE or2	2.5	O=a+b;		PIN * NONINV 1 999 1 1 1 1
+GATE xnor2 4 O=(a*b + !a*!b); PIN * UNKNOWN 1 999 1 1 1 1
+GATE xor2 4 O=(a*!b + !a*b); PIN * UNKNOWN 1 999 1 1 1 1 
+#GATE nand3 2 O=!(a*b*c);	PIN * INV 1 999 1 1 1 1
+#GATE nor3	2	O=!(a+b+c);	PIN * INV 1 999 1 1 1 1
+#GATE aoi21	2.5	O=!(a*b+c);	PIN * INV 1 999 1 1 1 1
+#GATE aoi22	2.5	O=!(a*b+c*d);	PIN * INV 1 999 1 1 1 1
+#GATE oai21	3	O=!((a+b)*c);	PIN * INV 1 999 1 1 1 1
+#GATE oai22	3	O=!((a+b)*(c+d)); PIN * INV 1 999 1 1 1 1
+
+
+# Higher Order Functions
+# have to see the delay in order to calculate the critical delay
+# 3 input functions 
+
+GATE min 2.5 O=!c *!(a*b) + c*!(a+b);  PIN * INV 1 999 1 1 1 1 
+GATE maj 3.5 O=!c * (a*b) + c*(a+b); PIN * NONINV 1 999 1 1 1 1 
+GATE xor3 5  O=!c*(a*b + !a*!b) + c*(a*!b + !a*b); PIN * UNKNOWN 1 999 1 1 1 1 
+#GATE impl_nimpl_1 2.5 O=!c*(!a+b) + c*(!a*b); PIN * INV 1 999 1 1 1 1 
+#GATE impl_nimpl_2 2.5 O=!c*(a+!b) + c*(a*!b); PIN * INV 1 999 1 1 1 1
+
+
+
+# 4 input functions 
+GATE aoioai21	        3.5	 O=!((a*b)+c)*s + !((a+b)*c)*(!s) ;	PIN * INV 1 999 1 1 1 1
+GATE nand3_nor3 3 O= !c*!(a*b*c) + c*!(a+b+c); PIN * INV 1 999 1 1 1 1 
+
+# 5 input functions
+GATE aoioai22	        4	 O=!((a+b)*(c+d))*s + !((a*b)+(c*d))*(!s) ;	PIN * INV 1 999 1 1 1 1
+#GATE func1     7 O=(!c*d*(a*b + a*!b + !a*b) + !a*!b*(c*d + c*!d +!c*d) + abc)*s + !(!c*d*(a*b + a*!b + !a*b) + !a*!b*(c*d + c*!d +!c*d) + abc)*(!s) ;	PIN * NONINV 1 999 1 1 1 1
+ 
