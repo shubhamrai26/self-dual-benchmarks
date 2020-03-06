@@ -8,6 +8,6 @@ mv experiments experiments.bak
 git clone https://github.com/shubhamrai26/iwls2020_experiments.git experiments
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=ON -DMOCKTURTLE_EXPERIMENTS=ON ..
+cmake -DCMAKE_BUILD_TYPE=RELEASE -DMOCKTURTLE_EXPERIMENTS=ON ..
 make -j4
 ```
