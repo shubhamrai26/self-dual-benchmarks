@@ -216,5 +216,4 @@ int main()
 /***
  * TODOs:
  * - Quantify the self-duality of a benchmark circuit
- * - Missing GENLIB file
  */
