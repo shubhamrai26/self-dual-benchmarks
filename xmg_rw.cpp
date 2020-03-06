@@ -36,6 +36,7 @@
 #include "experiments.hpp"
 
 #include <lorina/lorina.hpp>
+#include <kitty/kitty.hpp>
 #include <fmt/format.h>
 
 template<typename Ntk>
@@ -192,22 +193,136 @@ void experiment2( experiment2_params const& ep, std::vector<std::string> const& 
   exp.table();
 }
 
+struct experiment3_params
+{
+  uint32_t cut_size{5u};
+  uint32_t num_rewrite_times{3u};
+  bool verify = true;
+};
+
+double quantify_self_duality( mockturtle::xmg_network const& xmg )
+{
+  mockturtle::cut_enumeration_params ps;
+  ps.cut_size = 5;
+  ps.cut_limit = 12;
+  ps.minimize_truth_table = true;
+
+  mockturtle::cut_enumeration_stats st;
+  auto const cuts = mockturtle::cut_enumeration<mockturtle::xmg_network, true>( xmg, ps, &st );
+
+  double sum_score = 0.0;
+  xmg.foreach_gate( [&]( auto const& n ) {
+      /* foreach cut */
+      auto num_self_dual_node_cuts = 0u;
+      auto num_node_cuts = 0u;
+      for ( auto const& cut : cuts.cuts( xmg.node_to_index( n ) ) )
+      {
+        const auto tt = cuts.truth_table( *cut );
+        if ( kitty::is_selfdual( tt ) )
+        {
+          ++num_self_dual_node_cuts;
+        }
+        ++num_node_cuts;
+      }
+
+      sum_score += double( num_self_dual_node_cuts ) / num_node_cuts;
+    });
+
+  return sum_score / xmg.num_gates();
+}
+
+void experiment3( experiment3_params const& ep, std::vector<std::string> const& benchmarks = experiments::epfl_benchmarks(), std::string const& path_type = "", std::string const& file_type = "aig" )
+{
+  std::cout << "===========================================================================" << std::endl;
+  std::cout << "EXPERIMENT#3: node_resynthesis, rewriting, and quantify self-duality" << std::endl;
+  std::cout << "===========================================================================" << std::endl;
+
+  experiments::experiment<std::string, std::string, std::string, double, double, double, bool>
+    exp( "node_resynthesis", "benchmark", "AIG gates [= ANDs]", "XMG gates [= XOR3s + MAJs]", "self-dual ratio", "self-dual score", "runtime", "equivalent" );
+  for ( auto const& benchmark : benchmarks )
+  {
+    fmt::print( "[i] processing {}\n", benchmark );
+
+    /* read the benchmarks */
+    mockturtle::aig_network aig;
+    if ( !read_benchmark( aig, benchmark, path_type, file_type ) )
+      continue;
+
+    mockturtle::xmg_network xmg;
+    mockturtle::xmg3_npn_resynthesis<mockturtle::xmg_network> resyn;
+
+    /* prepare XMG using node resynthesis */
+    mockturtle::node_resynthesis_params noderesyn_ps;
+    mockturtle::node_resynthesis_stats noderesyn_st;
+    mockturtle::node_resynthesis( xmg, aig, resyn, noderesyn_ps, &noderesyn_st );
+
+    mockturtle::stopwatch<>::duration rewrite_time_total{0};
+    auto size_before = xmg.size();
+    for ( auto i = 0u; i < ep.num_rewrite_times; ++i )
+    {
+      mockturtle::cut_rewriting_params rewrite_ps;
+      rewrite_ps.cut_enumeration_ps.cut_size = 4;
+      rewrite_ps.progress = true;
+
+      mockturtle::cut_rewriting_stats rewrite_st;
+      mockturtle::cut_rewriting( xmg, resyn, rewrite_ps, &rewrite_st );
+      xmg = mockturtle::cleanup_dangling( xmg );
+
+      rewrite_time_total += rewrite_st.time_total;
+
+      /* terminate early if size does not change */
+      if ( xmg.size() == size_before )
+        break;
+
+      size_before = xmg.size();
+    }
+
+    /* profile XMG gates */
+    mockturtle::xmg_cost_params xmg_st;
+    num_gate_profile( xmg, xmg_st );
+
+    auto const score = quantify_self_duality( xmg );
+
+    /* verify reasults using ABC's CEC command */
+    auto const cec = ( !ep.verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark, path_type, file_type );
+
+    /* fill benchmark table */
+    exp( benchmark,
+         /* AIG: */ fmt::format( "{:7d}", aig.num_gates() ),
+         /* XMG: */ fmt::format( "{:7d} = {:7d} + {:7d}", xmg.num_gates(), xmg_st.total_xor3, xmg_st.total_maj ),
+         /* self-duality ratio: */ double( xmg_st.actual_xor3 + xmg_st.actual_maj ) / double( xmg.num_gates() ),
+         /* self-duality score: */ score,
+         /* runtime */ mockturtle::to_seconds( noderesyn_st.time_total + rewrite_time_total ),
+         /* verify: */ cec );
+  }
+
+  exp.save();
+  exp.table();
+}
+
 int main()
 {
   /* NOTE that we disable equivalence checking for cryptographic benchmarks because it is typically too time consuming */
 
-  /* experiment #1: node resynthesis of EPFL benchmarks given as AIGs into X3MGs */
+#if 0
+  /* experiment #1: node resynthesis of benchmarks into X3MGs */
   {
     experiment1( experiment1_params{true} );
     experiment1( experiment1_params{false}, experiments::crypto_benchmarks(), "_crypto", "v" );
   }
 
-  /* experiment #2: node resynthesis and 1x nad 3x rewriting of EPFL benchmarks given as AIGs into X3MGs using NPN4-DB generated with exact synthesis */
+  /* experiment #2: node resynthesis and 1x nad 3x rewriting of benchmarks into X3MGs using NPN4-DB generated with exact synthesis */
   {
     experiment2( experiment2_params{1u, true} );
     experiment2( experiment2_params{1u, false}, experiments::crypto_benchmarks(), "_crypto", "v" );
     experiment2( experiment2_params{2u, true} );
     experiment2( experiment2_params{2u, false}, experiments::crypto_benchmarks(), "_crypto", "v" );
+  }
+#endif
+
+  /* experiment #3: node resynthesis, rewriting, and quantify self-duality */
+  {
+    experiment3( experiment3_params{5u, true} );
   }
 
   return 0;
