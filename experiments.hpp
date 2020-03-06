@@ -387,9 +387,45 @@ static constexpr uint32_t random     = 0b11111111110000000000;
 static constexpr uint32_t all        = 0b11111111111111111111;
 // clang-format on
 
-static const char* benchmarks[] = {
+static const char* epfl_benchmark_names[] = {
     "adder", "bar", "div", "hyp", "log2", "max", "multiplier", "sin", "sqrt", "square",
     "arbiter", "cavlc", "ctrl", "dec", "i2c", "int2float", "mem_ctrl", "priority", "router", "voter"};
+
+static const char* crypto_benchmark_names[] = {
+  "AES-expanded_untilsat",
+  "AES-non-expanded_unstilsat",
+  "DES-expanded_untilsat",
+  "DES-non-expanded_untilsat",
+  "adder_32bit_untilsat",
+  "adder_64bit_untilsat",
+  "adder_untilsat",
+  // "arbiter_untilsat",
+  // "bar_untilsat",
+  // "cavlc_untilsat",
+  "comparator_32bit_signed_lt_untilsat",
+  "comparator_32bit_signed_lteq_untilsat",
+  "comparator_32bit_unsigned_lt_untilsat",
+  "comparator_32bit_unsigned_lteq_untilsat",
+  // "ctrl_untilsat",
+  // "dec_untilsat",
+  // "div_untilsat",
+  // "i2c_untilsat",
+  // "int2float_untilsat",
+  // "log2_untilsat",
+  // "max_untilsat",
+  "md5_untilsat",
+  // "mem_ctrl_untilsat",
+  "mult_32x32_untilsat",
+  // "multiplier_untilsat",
+  // "priority_untilsat",
+  // "router_untilsat",
+  "sha-1_untilsat",
+  "sha-256_untilsat",
+  // "sin_untilsat",
+  // "sqrt_untilsat",
+  // "square_untilsat",
+  // "voter_untilsat"
+};
 
 std::vector<std::string> epfl_benchmarks( uint32_t selection = all )
 {
@@ -398,8 +434,18 @@ std::vector<std::string> epfl_benchmarks( uint32_t selection = all )
   {
     if ( ( selection >> i ) & 1 )
     {
-      result.push_back( benchmarks[i] );
+      result.push_back( epfl_benchmark_names[i] );
     }
+  }
+  return result;
+}
+
+std::vector<std::string> crypto_benchmarks()
+{
+  std::vector<std::string> result;
+  for ( uint32_t i = 0u; i < 15u; ++i )
+  {
+    result.push_back( crypto_benchmark_names[i] );
   }
   return result;
 }
@@ -414,10 +460,10 @@ std::string benchmark_path( std::string const& benchmark_name, std::string const
 }
 
 template<class Ntk>
-bool abc_cec( Ntk const& ntk, std::string const& benchmark )
+bool abc_cec( Ntk const& ntk, std::string const& benchmark, std::string const& path_type = "", std::string const& filetype = "aig" )
 {
   mockturtle::write_bench( ntk, "/tmp/test.bench" );
-  std::string command = fmt::format( "abc -q \"cec -n {} /tmp/test.bench\"", benchmark_path( benchmark ) );
+  std::string command = fmt::format( "abc -q \"cec -n {} /tmp/test.bench\"", benchmark_path( benchmark, path_type, filetype ) );
 
   std::array<char, 128> buffer;
   std::string result;
@@ -434,11 +480,11 @@ bool abc_cec( Ntk const& ntk, std::string const& benchmark )
   return result.size() >= 23 && result.substr( 0u, 23u ) == "Networks are equivalent";
 }
 template <class Ntk>
-float abc_map (Ntk const& ntk, std::string const& genlib_path )
+float abc_map ( Ntk const& ntk, std::string const& genlib_path )
 {
   mockturtle::write_verilog( ntk, "/tmp/test.v" );
-  std::string command = fmt::format( "abc -q \"read /tmp/test.v; read_genlib {} ;map; print_gates\"", genlib_path);
-  
+  std::string command = fmt::format( "abc -q \"read /tmp/test.v; read_genlib {} ;map; print_gates\"", genlib_path );
+
   std::array<char, 1024> buffer;
   std::string result;
   std::unique_ptr<FILE, decltype( &pclose )> pipe( popen( command.c_str(), "r" ), pclose );
@@ -458,48 +504,47 @@ float abc_map (Ntk const& ntk, std::string const& genlib_path )
   uint32_t lp = total_str.find( "100 \%" );
   std::string str1 = total_str.substr ( ( sp + 6 ), ( lp - sp - 6 ) ); // 6 as to ignore "=" 
 
-  return std::stof( str1 ); 
+  return std::stof( str1 );
 }
 
-void abc_lut_reader_if ( std::string const& benchmark )
+void abc_lut_reader_if( std::string const& benchmark )
 {
-     std::string command = fmt::format( "abc -q \"read {}; if -K 3; print_stats; write_bench {}\"", benchmark_path ( benchmark ), benchmark_path( benchmark, "_if_bench", "bench") );
+  std::string command = fmt::format( "abc -q \"read {}; if -K 3; print_stats; write_bench {}\"", benchmark_path( benchmark ), benchmark_path( benchmark, "_if_bench", "bench") );
 
-    std::array<char, 1024> buffer;
-    std::unique_ptr<FILE, decltype( &pclose )> pipe( popen( command.c_str(), "r" ), pclose );    
-    std::string result;
+  std::array<char, 1024> buffer;
+  std::unique_ptr<FILE, decltype( &pclose )> pipe( popen( command.c_str(), "r" ), pclose );
+  std::string result;
 
-    if ( !pipe )
-    {
-        throw std::runtime_error( "popen() failed" );
-    }
-    while ( fgets( buffer.data(), buffer.size(), pipe.get() ) != nullptr )
-    {
-        result += buffer.data();
-    }
-    std::cout << "result LUT if-mapped ===============" << std::endl <<  std::endl;
-    std::cout << result << std::endl;
+  if ( !pipe )
+  {
+    throw std::runtime_error( "popen() failed" );
+  }
+  while ( fgets( buffer.data(), buffer.size(), pipe.get() ) != nullptr )
+  {
+    result += buffer.data();
+  }
+  std::cout << "result LUT if-mapped ===============" << std::endl <<  std::endl;
+  std::cout << result << std::endl;
 }
 
-void abc_lut_reader_mf ( std::string const& benchmark )
+void abc_lut_reader_mf( std::string const& benchmark )
 {
-     std::string command = fmt::format( "abc -q \"read {};&get; &mf -K 3;&put print_stats; write_bench {}\"", benchmark_path ( benchmark ), benchmark_path( benchmark, "_mf_bench", "bench") );
+  std::string command = fmt::format( "abc -q \"read {};&get; &mf -K 3;&put print_stats; write_bench {}\"", benchmark_path( benchmark ), benchmark_path( benchmark, "_mf_bench", "bench") );
 
-    std::array<char, 1024> buffer;
-    std::unique_ptr<FILE, decltype( &pclose )> pipe( popen( command.c_str(), "r" ), pclose );    
-    std::string result;
+  std::array<char, 1024> buffer;
+  std::unique_ptr<FILE, decltype( &pclose )> pipe( popen( command.c_str(), "r" ), pclose );
+  std::string result;
 
-    if ( !pipe )
-    {
-        throw std::runtime_error( "popen() failed" );
-    }
-    while ( fgets( buffer.data(), buffer.size(), pipe.get() ) != nullptr )
-    {
-        result += buffer.data();
-    }
-    std::cout << "result LUT mf-mapped ===============" << std::endl <<  std::endl;
-    std::cout << result << std::endl;
+  if ( !pipe )
+  {
+    throw std::runtime_error( "popen() failed" );
+  }
+  while ( fgets( buffer.data(), buffer.size(), pipe.get() ) != nullptr )
+  {
+    result += buffer.data();
+  }
+  std::cout << "result LUT mf-mapped ===============" << std::endl <<  std::endl;
+  std::cout << result << std::endl;
 }
-
 
 } // namespace experiments

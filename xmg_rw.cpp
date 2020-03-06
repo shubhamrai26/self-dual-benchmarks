@@ -30,6 +30,7 @@
 #include "mockturtle/algorithms/cut_rewriting.hpp"
 #include "mockturtle/algorithms/cleanup.hpp"
 #include "mockturtle/io/aiger_reader.hpp"
+#include "mockturtle/io/verilog_reader.hpp"
 #include "mockturtle/properties/xmgcost.hpp"
 
 #include "experiments.hpp"
@@ -37,23 +38,61 @@
 #include <lorina/lorina.hpp>
 #include <fmt/format.h>
 
-void experiment1( bool verify = true )
+template<typename Ntk>
+bool read_benchmark( Ntk& ntk, std::string const& benchmark, std::string const& path_type = "", std::string const& file_type = "aig" )
 {
+  if ( file_type == "aig" )
+  {
+    auto const result = lorina::read_aiger( experiments::benchmark_path( benchmark, path_type, file_type ), mockturtle::aiger_reader( ntk ) );
+    if ( result != lorina::return_code::success )
+    {
+      fmt::print( "[e] reading benchmark {} failed\n"
+                  "[e] continuing with the next benchmark file\n", benchmark );
+      return false;
+    }
+  }
+  else if ( file_type == "v" )
+  {
+    auto const result = lorina::read_verilog( experiments::benchmark_path( benchmark, path_type, file_type ), mockturtle::verilog_reader( ntk ) );
+    if ( result != lorina::return_code::success )
+    {
+      fmt::print( "[e] reading benchmark {} failed\n"
+                  "[e] continuing with the next benchmark file\n", benchmark );
+      return false;
+    }
+  }
+  else
+  {
+    fmt::print( "[e] unsupported benchmark extension\n"
+                "[e] continuing with the next benchmark file\n", benchmark );
+    return false;
+  }
+
+  /* success */
+  return true;
+}
+
+struct experiment1_params
+{
+  bool verify = true;
+};
+
+void experiment1( experiment1_params const& ep, std::vector<std::string> const& benchmarks = experiments::epfl_benchmarks(), std::string const& path_type = "", std::string const& file_type = "aig" )
+{
+  std::cout << "===========================================================================" << std::endl;
+  std::cout << "EXPERIMENT#1: node_resynthesis" << std::endl;
+  std::cout << "===========================================================================" << std::endl;
+
   experiments::experiment<std::string, std::string, std::string, float, bool>
     exp( "node_resynthesis", "benchmark", "AIG gates [= ANDs]", "XMG gates [= XOR3s + MAJs]", "runtime", "equivalent" );
-  for ( auto const& benchmark : experiments::epfl_benchmarks() )
+  for ( auto const& benchmark : benchmarks )
   {
     fmt::print( "[i] processing {}\n", benchmark );
 
     /* read the benchmarks */
     mockturtle::aig_network aig;
-    auto const result = lorina::read_aiger( experiments::benchmark_path( benchmark ), mockturtle::aiger_reader( aig ) );
-    if ( result != lorina::return_code::success )
-    {
-      fmt::print( "[e] reading benchmark {} failed\n"
-                  "[e] continuing with the next benchmark file\n", benchmark );
+    if ( !read_benchmark( aig, benchmark, path_type, file_type ) )
       continue;
-    }
 
     /* resynthesize the benchmarks */
     mockturtle::xmg_network xmg;
@@ -68,7 +107,7 @@ void experiment1( bool verify = true )
     num_gate_profile( xmg, xmg_st );
 
     /* verify reasults using ABC's CEC command */
-    auto const cec = ( !verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark );
+    auto const cec = ( !ep.verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark, path_type, file_type );
 
     /* fill benchmark table */
     exp( benchmark,
@@ -82,23 +121,28 @@ void experiment1( bool verify = true )
   exp.table();
 }
 
-void experiment2( uint32_t num_rewrite_times = 1u, bool verify = true )
+struct experiment2_params
 {
+  uint32_t num_rewrite_times{1u};
+  bool verify{true};
+};
+
+void experiment2( experiment2_params const& ep, std::vector<std::string> const& benchmarks = experiments::epfl_benchmarks(), std::string const& path_type = "", std::string const& file_type = "aig" )
+{
+  std::cout << "===========================================================================" << std::endl;
+  std::cout << "EXPERIMENT#2: node_resynthesis & rewritiing" << std::endl;
+  std::cout << "===========================================================================" << std::endl;
+
   experiments::experiment<std::string, std::string, std::string, float, bool>
     exp( "node_resynthesis", "benchmark", "AIG gates [= ANDs]", "XMG gates [= XOR3s + MAJs]", "runtime", "equivalent" );
-  for ( auto const& benchmark : experiments::epfl_benchmarks() )
+  for ( auto const& benchmark : benchmarks )
   {
     fmt::print( "[i] processing {}\n", benchmark );
 
     /* read the benchmarks */
     mockturtle::aig_network aig;
-    auto const result = lorina::read_aiger( experiments::benchmark_path( benchmark ), mockturtle::aiger_reader( aig ) );
-    if ( result != lorina::return_code::success )
-    {
-      fmt::print( "[e] reading benchmark {} failed\n"
-                  "[e] continuing with the next benchmark file\n", benchmark );
+    if ( !read_benchmark( aig, benchmark, path_type, file_type ) )
       continue;
-    }
 
     mockturtle::xmg_network xmg;
     mockturtle::xmg3_npn_resynthesis<mockturtle::xmg_network> resyn;
@@ -110,7 +154,7 @@ void experiment2( uint32_t num_rewrite_times = 1u, bool verify = true )
 
     mockturtle::stopwatch<>::duration rewrite_time_total{0};
     auto size_before = xmg.size();
-    for ( auto i = 0u; i < num_rewrite_times; ++i )
+    for ( auto i = 0u; i < ep.num_rewrite_times; ++i )
     {
       mockturtle::cut_rewriting_params rewrite_ps;
       rewrite_ps.cut_enumeration_ps.cut_size = 4;
@@ -122,7 +166,7 @@ void experiment2( uint32_t num_rewrite_times = 1u, bool verify = true )
 
       rewrite_time_total += rewrite_st.time_total;
 
-      /* terminate early if size stays constant */
+      /* terminate early if size does not change */
       if ( xmg.size() == size_before )
         break;
 
@@ -134,7 +178,7 @@ void experiment2( uint32_t num_rewrite_times = 1u, bool verify = true )
     num_gate_profile( xmg, xmg_st );
 
     /* verify reasults using ABC's CEC command */
-    auto const cec = ( !verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark );
+    auto const cec = ( !ep.verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark, path_type, file_type );
 
     /* fill benchmark table */
     exp( benchmark,
@@ -150,12 +194,27 @@ void experiment2( uint32_t num_rewrite_times = 1u, bool verify = true )
 
 int main()
 {
+  /* NOTE that we disable equivalence checking for cryptographic benchmarks because it is typically too time consuming */
+
   /* experiment #1: node resynthesis of EPFL benchmarks given as AIGs into X3MGs */
-  // experiment1();
+  {
+    experiment1( experiment1_params{true} );
+    experiment1( experiment1_params{false}, experiments::crypto_benchmarks(), "_crypto", "v" );
+  }
 
   /* experiment #2: node resynthesis and 1x nad 3x rewriting of EPFL benchmarks given as AIGs into X3MGs using NPN4-DB generated with exact synthesis */
-  experiment2( 1u );
-  experiment2( 3u );
+  {
+    experiment2( experiment2_params{1u, true} );
+    experiment2( experiment2_params{1u, false}, experiments::crypto_benchmarks(), "_crypto", "v" );
+    experiment2( experiment2_params{2u, true} );
+    experiment2( experiment2_params{2u, false}, experiments::crypto_benchmarks(), "_crypto", "v" );
+  }
 
   return 0;
 }
+
+/***
+ * TODOs:
+ * - Quantify the self-duality of a benchmark circuit
+ * - Missing GENLIB file
+ */
