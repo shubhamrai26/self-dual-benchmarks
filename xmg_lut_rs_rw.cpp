@@ -88,7 +88,7 @@ int main()
     //Set the genlib path here used with ABC
     std::string const genlib_path = "/home/shubham/My_work/abc-vlsi-cad-flow/std_libs/date_lib_count_tt_4.genlib";
 
-    float area_before = abc_map( xmg, genlib_path );
+    float area_before = abc_techmap( xmg, genlib_path );
 
     xmg_cost_params ps1, ps2;
     int32_t size_before, size_after, size_per_iteration;
@@ -163,7 +163,7 @@ int main()
     sd_rat = ( double( ps2.actual_maj + ps2.actual_xor3 )/  size_after ) * 100;
     std::string sd_after = fmt::format( "{}/{} = {}", ( ps2.actual_maj + ps2.actual_xor3 ),  size_after, sd_rat );
     
-    auto area_after= abc_map( xmg, genlib_path );
+    auto area_after= abc_techmap( xmg, genlib_path );
     float area_imp = ( ( area_before - area_after ) / area_before ) * 100 ; 
 
     std::string rt = fmt::format( " {:>5.2f} / {:>5.2f}" , rw, rs  );

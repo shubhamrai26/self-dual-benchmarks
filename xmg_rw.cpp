@@ -200,8 +200,9 @@ struct experiment3_params
   bool verify = true;
 };
 
-/*! \brief Quantifies self-duality of an XMG by assessing how many 3- to 5-feasiable cuts of a node on average represent a self-dual function. */
-double quantify_self_duality_using_average_over_cuts( mockturtle::xmg_network const& xmg )
+/*! \brief Quantifies self-duality of a network by assessing how many 3- to 5-feasiable cuts of a node on average represent a self-dual function. */
+template<typename Ntk>
+double quantify_self_duality_using_average_over_cuts( Ntk const& ntk )
 {
   mockturtle::cut_enumeration_params ps;
   ps.cut_size = 5;
@@ -209,15 +210,15 @@ double quantify_self_duality_using_average_over_cuts( mockturtle::xmg_network co
   ps.minimize_truth_table = true;
 
   mockturtle::cut_enumeration_stats st;
-  auto const cuts = mockturtle::cut_enumeration<mockturtle::xmg_network, true>( xmg, ps, &st );
+  auto const cuts = mockturtle::cut_enumeration<Ntk, true>( ntk, ps, &st );
 
   double sum_score = 0.0;
-  xmg.foreach_gate( [&]( auto const& n ) {
+  ntk.foreach_gate( [&]( auto const& n ) {
       auto num_self_dual_node_cuts = 0u;
       auto num_node_cuts = 0u;
 
       /* foreach cut */
-      for ( auto const& cut : cuts.cuts( xmg.node_to_index( n ) ) )
+      for ( auto const& cut : cuts.cuts( ntk.node_to_index( n ) ) )
       {
         /* skip trivial cuts */
         if ( cut->size() < 3 )
@@ -234,11 +235,12 @@ double quantify_self_duality_using_average_over_cuts( mockturtle::xmg_network co
       }
     });
 
-  return sum_score / xmg.num_gates();
+  return sum_score / ntk.num_gates();
 }
 
-/*! \brief Quantifies self-duality of an XMG by assessing if on average a 3- to 5-feasible cuts for a node exists that represents a self-dual function. */
-double quantify_self_duality_using_maximum_of_cuts( mockturtle::xmg_network const& xmg )
+/*! \brief Quantifies self-duality of a network by assessing if on average a 3- to 5-feasible cuts for a node exists that represents a self-dual function. */
+template<typename Ntk>
+double quantify_self_duality_using_maximum_of_cuts( Ntk const& ntk )
 {
   mockturtle::cut_enumeration_params ps;
   ps.cut_size = 5;
@@ -246,12 +248,12 @@ double quantify_self_duality_using_maximum_of_cuts( mockturtle::xmg_network cons
   ps.minimize_truth_table = true;
 
   mockturtle::cut_enumeration_stats st;
-  auto const cuts = mockturtle::cut_enumeration<mockturtle::xmg_network, true>( xmg, ps, &st );
+  auto const cuts = mockturtle::cut_enumeration<Ntk, true>( ntk, ps, &st );
 
   uint32_t num_self_dual_nodes = 0u;
-  xmg.foreach_gate( [&]( auto const& n ) {
+  ntk.foreach_gate( [&]( auto const& n ) {
       bool has_self_dual_node_cut = false;
-      for ( auto const& cut : cuts.cuts( xmg.node_to_index( n ) ) )
+      for ( auto const& cut : cuts.cuts( ntk.node_to_index( n ) ) )
       {
         /* skip trivial cuts */
         if ( cut->size() < 3 )
@@ -270,17 +272,24 @@ double quantify_self_duality_using_maximum_of_cuts( mockturtle::xmg_network cons
       }
     });
 
-  return double( num_self_dual_nodes ) / xmg.num_gates();
+  return double( num_self_dual_nodes ) / ntk.num_gates();
 }
 
 void experiment3( experiment3_params const& ep, std::vector<std::string> const& benchmarks = experiments::epfl_benchmarks(), std::string const& path_type = "", std::string const& file_type = "aig" )
 {
+  std::string const TECHLIB_PATH = "../experiments/techlib/simple.genlib";
+
   std::cout << "===========================================================================" << std::endl;
   std::cout << "EXPERIMENT#3: node_resynthesis, rewriting, and quantify self-duality" << std::endl;
   std::cout << "===========================================================================" << std::endl;
 
-  experiments::experiment<std::string, std::string, std::string, double, double, double, double, bool>
-    exp( "node_resynthesis", "benchmark", "AIG gates [= ANDs]", "XMG gates [= XOR3s + MAJs]", "self-dual node-ratio", "self-dual avg cut-ratio", "self-dual best cut-ratio", "runtime", "equivalent" );
+  experiments::experiment<std::string, std::string, std::string, std::string, std::string, std::string, double, double, double, double, bool>
+    exp( "node_resynthesis", "benchmark", "AIG gates [= ANDs]", "XMG gates [= XOR3s + MAJs]",
+         "self-dual AIG (bef)", /* (avg cut-ratio / best cut-ratio) */
+         "self-dual XMG (bef)", /* (avg cut-ratio / best cut-ratio) */
+         "self-dual (aft)",  /* (node-ratio / avg cut-ratio / best cut-ratio) */
+         "area-before", "area-after", "area-improv",
+         "runtime", "equivalent" );
   for ( auto const& benchmark : benchmarks )
   {
     fmt::print( "[i] processing {}\n", benchmark );
@@ -290,6 +299,9 @@ void experiment3( experiment3_params const& ep, std::vector<std::string> const& 
     if ( !read_benchmark( aig, benchmark, path_type, file_type ) )
       continue;
 
+    /* technology mapping on the initial benchmark */
+    double const area_before = experiments::abc_techmap( aig, TECHLIB_PATH );
+
     mockturtle::xmg_network xmg;
     mockturtle::xmg3_npn_resynthesis<mockturtle::xmg_network> resyn;
 
@@ -297,6 +309,12 @@ void experiment3( experiment3_params const& ep, std::vector<std::string> const& 
     mockturtle::node_resynthesis_params noderesyn_ps;
     mockturtle::node_resynthesis_stats noderesyn_st;
     mockturtle::node_resynthesis( xmg, aig, resyn, noderesyn_ps, &noderesyn_st );
+
+    auto const score1_before = quantify_self_duality_using_average_over_cuts( aig );
+    auto const score2_before = quantify_self_duality_using_maximum_of_cuts( aig );
+
+    auto const score1_before_xmg = quantify_self_duality_using_average_over_cuts( xmg );
+    auto const score2_before_xmg = quantify_self_duality_using_maximum_of_cuts( xmg );
 
     mockturtle::stopwatch<>::duration rewrite_time_total{0};
     auto size_before = xmg.size();
@@ -326,6 +344,11 @@ void experiment3( experiment3_params const& ep, std::vector<std::string> const& 
     auto const score1 = quantify_self_duality_using_average_over_cuts( xmg );
     auto const score2 = quantify_self_duality_using_maximum_of_cuts( xmg );
 
+    /* technology mapping on the initial benchmark */
+    double const area_after = experiments::abc_techmap( xmg, TECHLIB_PATH );
+
+    double const area_improvement = double( 1.0 ) - ( area_after / area_before );
+
     /* verify results using ABC's CEC command */
     auto const cec = ( !ep.verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark, path_type, file_type );
 
@@ -333,9 +356,10 @@ void experiment3( experiment3_params const& ep, std::vector<std::string> const& 
     exp( benchmark,
          /* AIG: */ fmt::format( "{:7d}", aig.num_gates() ),
          /* XMG: */ fmt::format( "{:7d} = {:7d} + {:7d}", xmg.num_gates(), xmg_st.total_xor3, xmg_st.total_maj ),
-         /* self-duality ratio: */ double( xmg_st.actual_xor3 + xmg_st.actual_maj ) / double( xmg.num_gates() ),
-         /* self-duality score #1: */ score1,
-         /* self-duality score #2: */ score2,
+         /* self-duality scores (before): */ fmt::format( "{:3.2f} / {:3.2f}", score1_before, score2_before ),
+         /* self-duality scores (before): */ fmt::format( "{:3.2f} / {:3.2f}", score1_before_xmg, score2_before_xmg ),
+         /* self-duality scores (after): */ fmt::format( "{:3.2f} / {:3.2f} / {:3.2f}", double( xmg_st.actual_xor3 + xmg_st.actual_maj ) / double( xmg.num_gates() ), score1, score2 ),
+         /* TECH-MAP: */ area_before, area_after, area_improvement,
          /* runtime */ mockturtle::to_seconds( noderesyn_st.time_total + rewrite_time_total ),
          /* verify: */ cec );
   }

@@ -1,0 +1,18 @@
+GATE zero        0   O=CONST0;
+GATE one         0   O=CONST1;
+GATE buf         2   O=a;                                PIN * NONINV  1 999 1 1 1 1
+GATE inv         1   O=!a;                               PIN * INV     1 999 1 1 1 1
+GATE nand_i0   1.5 O=!(a*b);                             PIN * INV     1 999 1 1 1 1 
+GATE nand_i1   1.5 O=!(!a*b);                            PIN * INV     1 999 1 1 1 1 
+GATE nand_i2   1.5 O=!(a*!b);                            PIN * INV     1 999 1 1 1 1 
+GATE and_i0    1.5 O=(a*b);                              PIN * INV     1 999 1 1 1 1 
+GATE and_i1    1.5 O=(!a*b);                             PIN * INV     1 999 1 1 1 1 
+GATE and_i2    1.5 O=(a*!b);                             PIN * INV     1 999 1 1 1 1 
+
+# MAJ with different polarities (due to self-duality, w.l.o.g. we consider only `a` to be negated)
+GATE maj_i0  3.5 O=!c*(a*b) + c*(a+b);                 PIN * NONINV  1 999 1 1 1 1
+GATE maj_i1  3.5 O=!c*(!a*b) + c*(!a+b);               PIN * NONINV  1 999 1 1 1 1
+
+# XOR3 with different polarities  (due to self-duality, w.l.o.g. we consider only `a` to be negated)
+GATE xor3_i0 5   O=!c*(a*b + !a*!b) + c*(a*!b + !a*b); PIN * UNKNOWN 1 999 1 1 1 1
+GATE xor3_i1 5   O=!c*(!a*b + a*!b) + c*(!a*!b + a*b); PIN * UNKNOWN 1 999 1 1 1 1

@@ -480,10 +480,10 @@ bool abc_cec( Ntk const& ntk, std::string const& benchmark, std::string const& p
   return result.size() >= 23 && result.substr( 0u, 23u ) == "Networks are equivalent";
 }
 template <class Ntk>
-float abc_map ( Ntk const& ntk, std::string const& genlib_path )
+float abc_techmap( Ntk const& ntk, std::string const& genlib_path )
 {
   mockturtle::write_verilog( ntk, "/tmp/test.v" );
-  std::string command = fmt::format( "abc -q \"read /tmp/test.v; read_genlib {} ;map; print_gates\"", genlib_path );
+  std::string const command = fmt::format( "abc -q \"read /tmp/test.v; read_genlib {} ;map; print_gates\"", genlib_path );
 
   std::array<char, 1024> buffer;
   std::string result;
@@ -497,12 +497,12 @@ float abc_map ( Ntk const& ntk, std::string const& genlib_path )
     result += buffer.data();
   }
 
-  std :: cout << "results for mapping ============" <<  std::endl << result << std::endl;
+  std::cout << "results for mapping ============" <<  std::endl << result << std::endl;
 
-  std::string total_str = result.substr ( result.find( "TOTAL " ) + 1);
-  uint32_t sp = total_str.find( "Area" );
-  uint32_t lp = total_str.find( "100 \%" );
-  std::string str1 = total_str.substr ( ( sp + 6 ), ( lp - sp - 6 ) ); // 6 as to ignore "=" 
+  std::string const total_str = result.substr( result.find( "TOTAL " ) + 1 );
+  uint32_t const sp = total_str.find( "Area" );
+  uint32_t const lp = total_str.find( "100 \%" );
+  std::string const str1 = total_str.substr( ( sp + 6 ), ( lp - sp - 6 ) ); // 6 as to ignore "="
 
   return std::stof( str1 );
 }
