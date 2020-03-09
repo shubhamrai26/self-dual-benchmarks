@@ -221,7 +221,7 @@ double quantify_self_duality_using_average_over_cuts( Ntk const& ntk )
       for ( auto const& cut : cuts.cuts( ntk.node_to_index( n ) ) )
       {
         /* skip trivial cuts */
-        if ( cut->size() < 3 )
+        if ( cut->size() < 2 )
           continue;
 
         const auto tt = cuts.truth_table( *cut );
@@ -256,7 +256,7 @@ double quantify_self_duality_using_maximum_of_cuts( Ntk const& ntk )
       for ( auto const& cut : cuts.cuts( ntk.node_to_index( n ) ) )
       {
         /* skip trivial cuts */
-        if ( cut->size() < 3 )
+        if ( cut->size() < 2 )
           continue;
 
         const auto tt = cuts.truth_table( *cut );
@@ -356,8 +356,8 @@ void experiment3( experiment3_params const& ep, std::vector<std::string> const& 
     exp( benchmark,
          /* AIG: */ fmt::format( "{:7d}", aig.num_gates() ),
          /* XMG: */ fmt::format( "{:7d} = {:7d} + {:7d}", xmg.num_gates(), xmg_st.total_xor3, xmg_st.total_maj ),
-         /* self-duality scores (before): */ fmt::format( "{:3.2f} / {:3.2f}", score1_before, score2_before ),
-         /* self-duality scores (before): */ fmt::format( "{:3.2f} / {:3.2f}", score1_before_xmg, score2_before_xmg ),
+         /* self-duality AIG scores (before): */ fmt::format( "{:3.2f} / {:3.2f}", score1_before, score2_before ),
+         /* self-duality XMG scores (before): */ fmt::format( "{:3.2f} / {:3.2f}", score1_before_xmg, score2_before_xmg ),
          /* self-duality scores (after): */ fmt::format( "{:3.2f} / {:3.2f} / {:3.2f}", double( xmg_st.actual_xor3 + xmg_st.actual_maj ) / double( xmg.num_gates() ), score1, score2 ),
          /* TECH-MAP: */ area_before, area_after, area_improvement,
          /* runtime */ mockturtle::to_seconds( noderesyn_st.time_total + rewrite_time_total ),
