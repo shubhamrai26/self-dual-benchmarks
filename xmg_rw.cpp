@@ -391,6 +391,7 @@ int main()
   /* experiment #3: node resynthesis, rewriting, and quantify self-duality */
   {
     experiment3( experiment3_params{5u, true} );
+    experiment3( experiment3_params{5u, false}, experiments::crypto_benchmarks(), "_crypto", "v" );
   }
 
   return 0;
