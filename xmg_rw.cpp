@@ -107,7 +107,7 @@ void experiment1( experiment1_params const& ep, std::vector<std::string> const& 
     mockturtle::xmg_cost_params xmg_st;
     num_gate_profile( xmg, xmg_st );
 
-    /* verify reasults using ABC's CEC command */
+    /* verify results using ABC's CEC command */
     auto const cec = ( !ep.verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark, path_type, file_type );
 
     /* fill benchmark table */
@@ -178,7 +178,7 @@ void experiment2( experiment2_params const& ep, std::vector<std::string> const& 
     mockturtle::xmg_cost_params xmg_st;
     num_gate_profile( xmg, xmg_st );
 
-    /* verify reasults using ABC's CEC command */
+    /* verify results using ABC's CEC command */
     auto const cec = ( !ep.verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark, path_type, file_type );
 
     /* fill benchmark table */
@@ -200,7 +200,8 @@ struct experiment3_params
   bool verify = true;
 };
 
-double quantify_self_duality( mockturtle::xmg_network const& xmg )
+/*! \brief Quantifies self-duality of an XMG by assessing how many 3- to 5-feasiable cuts of a node on average represent a self-dual function. */
+double quantify_self_duality_using_average_over_cuts( mockturtle::xmg_network const& xmg )
 {
   mockturtle::cut_enumeration_params ps;
   ps.cut_size = 5;
@@ -212,23 +213,64 @@ double quantify_self_duality( mockturtle::xmg_network const& xmg )
 
   double sum_score = 0.0;
   xmg.foreach_gate( [&]( auto const& n ) {
-      /* foreach cut */
       auto num_self_dual_node_cuts = 0u;
       auto num_node_cuts = 0u;
+
+      /* foreach cut */
       for ( auto const& cut : cuts.cuts( xmg.node_to_index( n ) ) )
       {
+        /* skip trivial cuts */
+        if ( cut->size() < 3 )
+          continue;
+
         const auto tt = cuts.truth_table( *cut );
         if ( kitty::is_selfdual( tt ) )
         {
           ++num_self_dual_node_cuts;
         }
         ++num_node_cuts;
-      }
 
-      sum_score += double( num_self_dual_node_cuts ) / num_node_cuts;
+        sum_score += double( num_self_dual_node_cuts ) / num_node_cuts;
+      }
     });
 
   return sum_score / xmg.num_gates();
+}
+
+/*! \brief Quantifies self-duality of an XMG by assessing if on average a 3- to 5-feasible cuts for a node exists that represents a self-dual function. */
+double quantify_self_duality_using_maximum_of_cuts( mockturtle::xmg_network const& xmg )
+{
+  mockturtle::cut_enumeration_params ps;
+  ps.cut_size = 5;
+  ps.cut_limit = 12;
+  ps.minimize_truth_table = true;
+
+  mockturtle::cut_enumeration_stats st;
+  auto const cuts = mockturtle::cut_enumeration<mockturtle::xmg_network, true>( xmg, ps, &st );
+
+  uint32_t num_self_dual_nodes = 0u;
+  xmg.foreach_gate( [&]( auto const& n ) {
+      bool has_self_dual_node_cut = false;
+      for ( auto const& cut : cuts.cuts( xmg.node_to_index( n ) ) )
+      {
+        /* skip trivial cuts */
+        if ( cut->size() < 3 )
+          continue;
+
+        const auto tt = cuts.truth_table( *cut );
+        if ( kitty::is_selfdual( tt ) )
+        {
+          has_self_dual_node_cut = true;
+        }
+      }
+
+      if ( has_self_dual_node_cut )
+      {
+        ++num_self_dual_nodes;
+      }
+    });
+
+  return double( num_self_dual_nodes ) / xmg.num_gates();
 }
 
 void experiment3( experiment3_params const& ep, std::vector<std::string> const& benchmarks = experiments::epfl_benchmarks(), std::string const& path_type = "", std::string const& file_type = "aig" )
@@ -237,8 +279,8 @@ void experiment3( experiment3_params const& ep, std::vector<std::string> const& 
   std::cout << "EXPERIMENT#3: node_resynthesis, rewriting, and quantify self-duality" << std::endl;
   std::cout << "===========================================================================" << std::endl;
 
-  experiments::experiment<std::string, std::string, std::string, double, double, double, bool>
-    exp( "node_resynthesis", "benchmark", "AIG gates [= ANDs]", "XMG gates [= XOR3s + MAJs]", "self-dual ratio", "self-dual score", "runtime", "equivalent" );
+  experiments::experiment<std::string, std::string, std::string, double, double, double, double, bool>
+    exp( "node_resynthesis", "benchmark", "AIG gates [= ANDs]", "XMG gates [= XOR3s + MAJs]", "self-dual node-ratio", "self-dual avg cut-ratio", "self-dual best cut-ratio", "runtime", "equivalent" );
   for ( auto const& benchmark : benchmarks )
   {
     fmt::print( "[i] processing {}\n", benchmark );
@@ -281,9 +323,10 @@ void experiment3( experiment3_params const& ep, std::vector<std::string> const& 
     mockturtle::xmg_cost_params xmg_st;
     num_gate_profile( xmg, xmg_st );
 
-    auto const score = quantify_self_duality( xmg );
+    auto const score1 = quantify_self_duality_using_average_over_cuts( xmg );
+    auto const score2 = quantify_self_duality_using_maximum_of_cuts( xmg );
 
-    /* verify reasults using ABC's CEC command */
+    /* verify results using ABC's CEC command */
     auto const cec = ( !ep.verify || benchmark == "hyp" ) ? true : experiments::abc_cec( xmg, benchmark, path_type, file_type );
 
     /* fill benchmark table */
@@ -291,7 +334,8 @@ void experiment3( experiment3_params const& ep, std::vector<std::string> const& 
          /* AIG: */ fmt::format( "{:7d}", aig.num_gates() ),
          /* XMG: */ fmt::format( "{:7d} = {:7d} + {:7d}", xmg.num_gates(), xmg_st.total_xor3, xmg_st.total_maj ),
          /* self-duality ratio: */ double( xmg_st.actual_xor3 + xmg_st.actual_maj ) / double( xmg.num_gates() ),
-         /* self-duality score: */ score,
+         /* self-duality score #1: */ score1,
+         /* self-duality score #2: */ score2,
          /* runtime */ mockturtle::to_seconds( noderesyn_st.time_total + rewrite_time_total ),
          /* verify: */ cec );
   }
