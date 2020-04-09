@@ -41,33 +41,64 @@ void profile( const xmg_network& xmg)
     xmg_ps.report();
 }
 
-void create_xmg( xmg_network& xmg)  
+void create_xmg( xmg_network& xmg, const uint32_t& num_pis, const uint32_t& num_lev, const uint32_t& max_nodes_per_levels, const uint32_t& num_pos )  
 {
-    srand(time(NULL));
 
     using signal = mockturtle::xmg_network::signal;
 
-    std::array<signal,1000> pis;
-    std::array<signal,10000> wires;
-    signal pos;
+    std::vector<signal> pis;
+    std::vector<signal> sl;
 
-    auto iSecret = rand() % 10 + 1;
-
-    for (int i = 0; i < 1000; i++)
+    for (uint32_t i =0; i < num_pis; i++)
     {
-        pis[i] = xmg.create_pi( );
-        auto i1 = rand() % 1000 + 1;
-        auto i2 = rand() % 1000 + 1;
-        auto i3 = rand() % 1000 + 1;
-        for (int j = 0; j < 10; j++)
-        { 
-            wires[i]= xmg.create_maj(pis[i1], pis[(i2* i3) % 500 ], pis[( i3 * i1 ) % 300 ]);
-            wires[i+j] = xmg.create_xor3( pis[( i1 + 51 ) % 771 ], pis[ ( i2 + 43 ) % 121 ], pis[ ( i3+1 ) % 153]);
-        }
+        pis.emplace_back( xmg.create_pi( ) );
+        sl.emplace_back(pis[i]);
     }
 
-    auto const out = xmg.create_xor3( wires[rand()%100], wires[rand()%200], wires[rand()%300]);
-    xmg.create_po( out );
+    for (uint32_t i =1; i < num_lev; i++)
+    {
+        for (uint32_t j = 0; j < max_nodes_per_levels; j++)
+        {
+            signal wire;
+            auto i1 =  rand()%sl.size();
+            auto i2 =  rand()%sl.size();
+            auto i3 =  rand()%sl.size();
+            std::cout << i1 << " " << i2 << " " << i3 << std::endl;
+            if ( j%5 == 0)
+                wire =  (j%2) ? xmg.create_xor3(sl[i1], sl[i2], sl[i3]) : xmg.create_xor3(sl[i1], sl[i2], sl[i3]);
+                //wire =  xmg.create_maj(sl[i1], sl[i2], sl[i3]); 
+            else 
+                wire = xmg.create_and(sl[i3], sl[i1]); //, sl[i1]);
+            sl.emplace_back(wire);
+        }
+        std::cout<< "size of sl " <<  sl.size() << std::endl;
+        
+    }
+    //for (int i = 0; i < num_pis0; i++)
+    //{
+    //    pis[i] = xmg.create_pi( );
+    //    sl.emplace_back(pis[i]);
+    //    auto i1 = rand() % num_pis0 + 1;
+    //    auto i2 = rand() % num_pis0 + 1;
+    //    auto i3 = rand() % num_pis0 + 1;
+    //    wires[i]=  i %2 ? xmg.create_maj(pis[i1], pis[(i2* i3) % 500 ], pis[( i3 * i1 ) % 300 ]) : xmg.create_xor3(pis[i1], pis[(i2* i3) % 500 ], pis[( i3 * i1 ) % 300 ]);
+    //    sl.emplace_back(wires[i]);
+    //}
+
+    //for (int i = num_pis0; i < 2000; i++)
+    //{
+    //    auto i1 = rand() % 700 + 1;
+    //    auto i2 = rand() % 700 + 1;
+    //    auto i3 = rand() % 700 + 1;
+
+    //}
+
+    //srand(time(NULL));
+    for (uint32_t i = 0 ; i < num_pos;  i++)
+    {
+        auto const out = xmg.create_xor3( sl[rand()%sl.size()], sl[rand()%sl.size()], sl[rand()%sl.size()]);
+        xmg.create_po( out );
+    }
     std::cout << "xmg size " << xmg.num_gates() << std::endl;
     profile(xmg);
 }
@@ -115,15 +146,20 @@ opt_parameters call_rw( xmg_network& xmg)
 
 int main()
 {
+    srand(time(NULL));
+    uint32_t num_pis = 1567;
+    uint32_t num_levels = 323;
+    uint32_t max_nodes_per_levels = 1167;
+    uint32_t num_pos = 111;
     xmg_network xmg;
-    create_xmg( xmg );
+    create_xmg( xmg, num_pis, num_levels, max_nodes_per_levels, num_pos );
     xmg = cleanup_dangling( xmg );
     profile(xmg);
     
     auto const init_area = area_from_abc( xmg );
 
-    uint32_t num_iters;
-    uint32_t size_per_iteration;
+    uint32_t num_iters = 0;
+    uint32_t size_per_iteration = 0;
     float total_opt_time = 0; 
     float total_imp = 0;
 
@@ -145,6 +181,7 @@ int main()
             int diff = size_per_iteration - xmg.num_gates();
             total_imp = 100 * (double(std::abs(diff))/size_per_iteration);
         }
+        std::cout << "Iterations # " << num_iters <<  std::endl;
 
     } while ( total_imp > 0.5 );
 
