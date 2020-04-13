@@ -11,8 +11,10 @@
 #include <mockturtle/algorithms/node_resynthesis/xmg3_npn.hpp>
 #include <mockturtle/algorithms/xmg_algebraic_rewriting.hpp>
 #include<iostream>
+#include <mockturtle/io/write_verilog.hpp>
 #include<time.h>
 #include <mockturtle/views/depth_view.hpp>
+
 
 #include <experiments.hpp>
    
@@ -41,63 +43,46 @@ void profile( const xmg_network& xmg)
     xmg_ps.report();
 }
 
-void create_xmg( xmg_network& xmg, const uint32_t& num_pis, const uint32_t& num_lev, const uint32_t& max_nodes_per_levels, const uint32_t& num_pos )  
+void create_xmg( xmg_network& xmg, const uint32_t& num_pis, const uint32_t& num_lev, const uint32_t& max_nodes_per_levels)  
 {
 
     using signal = mockturtle::xmg_network::signal;
 
-    std::vector<signal> pis;
-    std::vector<signal> sl;
+    std::vector<std::pair<signal, bool>> sl;
 
     for (uint32_t i =0; i < num_pis; i++)
     {
-        pis.emplace_back( xmg.create_pi( ) );
-        sl.emplace_back(pis[i]);
+        sl.emplace_back( xmg.create_pi( ), false );
     }
 
     for (uint32_t i =1; i < num_lev; i++)
     {
         for (uint32_t j = 0; j < max_nodes_per_levels; j++)
         {
+            auto size_before = xmg.num_gates( ); 
             signal wire;
-            auto i1 =  rand()%sl.size();
-            auto i2 =  rand()%sl.size();
-            auto i3 =  rand()%sl.size();
-            std::cout << i1 << " " << i2 << " " << i3 << std::endl;
-            if ( j%5 == 0)
-                wire =  (j%2) ? xmg.create_xor3(sl[i1], sl[i2], sl[i3]) : xmg.create_xor3(sl[i1], sl[i2], sl[i3]);
-                //wire =  xmg.create_maj(sl[i1], sl[i2], sl[i3]); 
-            else 
-                wire = xmg.create_and(sl[i3], sl[i1]); //, sl[i1]);
-            sl.emplace_back(wire);
+            uint32_t i1, i2, i3;
+            //std::cout << i1 << " " << i2 << " " << i3 << std::endl;
+            do 
+            {
+                i1 =  rand()%sl.size();
+                i2 =  rand()%sl.size();
+                i3 =  rand()%sl.size();
+                wire =  (rand()%2) ? xmg.create_maj(sl[i1].first, sl[i2].first, sl[i3].first) : xmg.create_xor3(sl[i1].first, sl[i2].first, sl[i3].first);
+            } while ( size_before == xmg.num_gates( ) );
+            sl.emplace_back( wire, false  );
+            sl[i1].second = true;
+            sl[i2].second = true;
+            sl[i3].second = true;
         }
-        std::cout<< "size of sl " <<  sl.size() << std::endl;
+        //std::cout<< "size of sl " <<  sl.size() << std::endl;
         
     }
-    //for (int i = 0; i < num_pis0; i++)
-    //{
-    //    pis[i] = xmg.create_pi( );
-    //    sl.emplace_back(pis[i]);
-    //    auto i1 = rand() % num_pis0 + 1;
-    //    auto i2 = rand() % num_pis0 + 1;
-    //    auto i3 = rand() % num_pis0 + 1;
-    //    wires[i]=  i %2 ? xmg.create_maj(pis[i1], pis[(i2* i3) % 500 ], pis[( i3 * i1 ) % 300 ]) : xmg.create_xor3(pis[i1], pis[(i2* i3) % 500 ], pis[( i3 * i1 ) % 300 ]);
-    //    sl.emplace_back(wires[i]);
-    //}
 
-    //for (int i = num_pis0; i < 2000; i++)
-    //{
-    //    auto i1 = rand() % 700 + 1;
-    //    auto i2 = rand() % 700 + 1;
-    //    auto i3 = rand() % 700 + 1;
-
-    //}
-
-    //srand(time(NULL));
-    for (uint32_t i = 0 ; i < num_pos;  i++)
+    for (uint32_t i = 0 ; i < sl.size( );  i++)
     {
-        auto const out = xmg.create_xor3( sl[rand()%sl.size()], sl[rand()%sl.size()], sl[rand()%sl.size()]);
-        xmg.create_po( out );
+        if (sl[i].second == false )
+            xmg.create_po( sl[i].first);
     }
     std::cout << "xmg size " << xmg.num_gates() << std::endl;
     profile(xmg);
@@ -147,21 +132,25 @@ opt_parameters call_rw( xmg_network& xmg)
 int main()
 {
     srand(time(NULL));
-    uint32_t num_pis = 1567;
-    uint32_t num_levels = 323;
-    uint32_t max_nodes_per_levels = 1167;
-    uint32_t num_pos = 111;
+    uint32_t num_pis = 10;
+    uint32_t num_levels = 15;
+    uint32_t max_nodes_per_levels = 5;
     xmg_network xmg;
-    create_xmg( xmg, num_pis, num_levels, max_nodes_per_levels, num_pos );
+    create_xmg( xmg, num_pis, num_levels, max_nodes_per_levels);
     xmg = cleanup_dangling( xmg );
-    profile(xmg);
     
-    auto const init_area = area_from_abc( xmg );
+    auto const init_area = abc_map( xmg, genlib_path );
+    auto const dc2_area = abc_map_dc2( xmg, genlib_path); 
+    auto const dch_area = abc_map_dch( xmg, genlib_path );
+    //auto const c2rs_area = abc_map_compress2rs( xmg, genlib_path );
+   
 
     uint32_t num_iters = 0;
     uint32_t size_per_iteration = 0;
     float total_opt_time = 0; 
     float total_imp = 0;
+
+   // mockturtle::write_aiger(xmg, "sd.aig");
 
     // Call optimizations until convergence
     do 
@@ -186,8 +175,11 @@ int main()
     } while ( total_imp > 0.5 );
 
     profile(xmg);
-    float area_after = area_from_abc( xmg );
+    float area_after = abc_map( xmg, genlib_path );
 
-    std::cout << "init area " << init_area << " after area " << area_after << std::endl;
+    mockturtle::write_verilog( xmg, "sd.v" );
+
+    std::cout << "init area " << init_area << " after area " << area_after << "num_pos " << xmg.num_pos() << std::endl;
+    std::cout << "dc2 area " << dc2_area << "dch area " << dch_area << "c2rs " << std::endl;
     return 0;
 }
