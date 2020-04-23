@@ -41,14 +41,39 @@ void profile( const xmg_network& xmg)
     xmg_ps.reset();
     num_gate_profile( xmg, xmg_ps );
     xmg_ps.report();
+    std::cout << "xmg size " << xmg.num_gates() << std::endl;
 }
 
-void create_xmg( xmg_network& xmg, const uint32_t& num_pis, const uint32_t& num_lev, const uint32_t& max_nodes_per_levels)  
+mockturtle::xmg_network::signal create_xmg_sd_node ( xmg_network& xmg, std::vector<std::pair<mockturtle::xmg_network::signal, bool>> sl, const uint32_t& rand_id, const uint32_t& i1, const uint32_t& i2, const uint32_t& i3)
 {
+    std::cout << "xmg create self-dual function " << std::endl;
+    return (rand_id%2) ? xmg.create_maj(sl[i1].first, sl[i2].first, xmg.create_not(sl[i3].first)) : xmg.create_xor3(xmg.create_not(sl[i1].first), sl[i2].first, sl[i3].first);
+}
 
+mockturtle::xmg_network::signal create_xmg_node ( xmg_network& xmg, std::vector<std::pair<mockturtle::xmg_network::signal, bool>> sl, const uint32_t& rand_id, const uint32_t& i1, const uint32_t& i2, const uint32_t& i3 )
+{
+    std::cout << "xmg create and " << std::endl;
+    if (rand_id%5 == 0)
+        return xmg.create_and(sl[i1].first,xmg.create_xor(sl[i3].first, sl[i2].first));
+    if (rand_id%5 == 1 )
+        return xmg.create_or(sl[i1].first, xmg.create_not(xmg.create_and(sl[i3].first, sl[i1].first)));
+    if (rand_id%5 == 2 )
+        return xmg.create_or(sl[i1].first, xmg.create_not(xmg.create_and(sl[i3].first, sl[i2].first)));
+    if (rand_id%5 == 3 )
+        return xmg.create_or(sl[i1].first, xmg.get_constant(1));
+    if (rand_id%5 == 4 )
+        return xmg.create_xor(sl[i1].first, xmg.create_not(xmg.create_and(sl[i3].first, sl[i2].first)));
+        
+}
+
+void create_xmg( xmg_network& xmg, const uint32_t& num_pis, const uint32_t& num_lev, const uint32_t& max_nodes_per_levels, const uint32_t sd_ratio)  
+{
     using signal = mockturtle::xmg_network::signal;
 
     std::vector<std::pair<signal, bool>> sl;
+    uint32_t sd_attempts     = 0;
+    uint32_t normal_attempts = 0;
+    bool sd_or_normal = true;
 
     for (uint32_t i =0; i < num_pis; i++)
     {
@@ -68,12 +93,30 @@ void create_xmg( xmg_network& xmg, const uint32_t& num_pis, const uint32_t& num_
                 i1 =  rand()%sl.size();
                 i2 =  rand()%sl.size();
                 i3 =  rand()%sl.size();
-                wire =  (rand()%2) ? xmg.create_maj(sl[i1].first, sl[i2].first, sl[i3].first) : xmg.create_xor3(sl[i1].first, sl[i2].first, sl[i3].first);
+                //wire =  (rand()%2) ? xmg.create_maj(sl[i1].first, sl[i2].first, sl[i3].first) : xmg.create_xor3(sl[i1].first, sl[i2].first, sl[i3].first);
+                std::cout << "sd or normal " << (sd_or_normal ? "true" : "false" ) << std::endl;
+                wire = ( sd_or_normal) ? create_xmg_sd_node( xmg, sl, rand(), i1, i2, i3 ): create_xmg_node(xmg, sl, rand(), i1, i2, i3 );
             } while ( size_before == xmg.num_gates( ) );
             sl.emplace_back( wire, false  );
             sl[i1].second = true;
             sl[i2].second = true;
-            sl[i3].second = true;
+            sl[i3].second = (sd_or_normal) ? true: false;
+            //if ( (sd_attempts < sd_ratio) && (normal_attempts < (10 -sd_ratio) ) )
+            if (sd_attempts < sd_ratio) 
+            {
+                std::cout <<"sd attempts " << sd_attempts << std::endl;
+                sd_or_normal = true;
+                sd_attempts++;
+                normal_attempts = 0;
+            }
+            else if (normal_attempts < (10 -sd_ratio) ) 
+            {
+                std::cout <<"normal attempts " << normal_attempts << std::endl;
+                normal_attempts++;
+                sd_or_normal =  false;
+            }
+            else 
+                sd_attempts = 0;
         }
         //std::cout<< "size of sl " <<  sl.size() << std::endl;
         
@@ -84,7 +127,6 @@ void create_xmg( xmg_network& xmg, const uint32_t& num_pis, const uint32_t& num_
         if (sl[i].second == false )
             xmg.create_po( sl[i].first);
     }
-    std::cout << "xmg size " << xmg.num_gates() << std::endl;
     profile(xmg);
 }
 
@@ -131,18 +173,20 @@ opt_parameters call_rw( xmg_network& xmg)
 
 int main()
 {
-    srand(time(NULL));
-    uint32_t num_pis = 10;
-    uint32_t num_levels = 15;
-    uint32_t max_nodes_per_levels = 5;
+    //srand(time(NULL));
+    srand(5);
+    uint32_t num_pis = 128;
+    uint32_t num_levels = 231;
+    uint32_t max_nodes_per_levels = 131;
+    uint32_t sd_ratio = 10;
     xmg_network xmg;
-    create_xmg( xmg, num_pis, num_levels, max_nodes_per_levels);
+    create_xmg( xmg, num_pis, num_levels, max_nodes_per_levels, sd_ratio );
     xmg = cleanup_dangling( xmg );
     
     auto const init_area = abc_map( xmg, genlib_path );
-    auto const dc2_area = abc_map_dc2( xmg, genlib_path); 
+    auto const c2rs_area = abc_map_compress2rs( xmg, genlib_path); 
     auto const dch_area = abc_map_dch( xmg, genlib_path );
-    //auto const c2rs_area = abc_map_compress2rs( xmg, genlib_path );
+    auto const dc2_area = abc_map_dc2( xmg, genlib_path );
    
 
     uint32_t num_iters = 0;
@@ -179,7 +223,11 @@ int main()
 
     mockturtle::write_verilog( xmg, "sd.v" );
 
-    std::cout << "init area " << init_area << " after area " << area_after << "num_pos " << xmg.num_pos() << std::endl;
-    std::cout << "dc2 area " << dc2_area << "dch area " << dch_area << "c2rs " << std::endl;
+    std::cout << "init area "  << init_area     << std::endl;
+    std::cout << "c2rs area "  << c2rs_area     << std::endl;
+    std::cout << "dch area "   << dch_area      << std::endl;
+    std::cout << "dc2 area "   << dc2_area      << std::endl;
+    std::cout << "after area " << area_after    << std::endl;
+    std::cout << "num_pos "    << xmg.num_pos() << std::endl;
     return 0;
 }
